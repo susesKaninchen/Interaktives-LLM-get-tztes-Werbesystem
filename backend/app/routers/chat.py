@@ -99,7 +99,7 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
             full_content = ""
 
             # For tool-based intents, run the graph (non-streaming)
-            if intent in ("search", "crawl_url", "matching"):
+            if intent in ("search", "crawl_url", "matching", "user_profile"):
                 try:
                     graph = compile_graph()
                     result = await graph.ainvoke(state)

@@ -1,6 +1,24 @@
-import { useEffect } from "react";
-import { Plus, MessageSquare, Trash2, User } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, MessageSquare, Trash2, User, ChevronDown, ChevronUp } from "lucide-react";
 import { useChatStore } from "@/store/chatStore";
+import { UserProfilePanel } from "@/components/profile/UserProfilePanel";
+
+function ProfileSection() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-6 py-3 text-gray-400 hover:text-gray-200 text-sm transition-colors"
+      >
+        <User size={16} />
+        <span className="flex-1 text-left">Mein Profil</span>
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {open && <UserProfilePanel />}
+    </div>
+  );
+}
 
 export function Sidebar() {
   const {
@@ -58,11 +76,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="p-3 border-t border-gray-800">
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-400 hover:bg-gray-800 hover:text-gray-200 cursor-pointer text-sm transition-colors">
-          <User size={16} />
-          <span>Mein Profil</span>
-        </div>
+      <div className="border-t border-gray-800">
+        <ProfileSection />
       </div>
     </aside>
   );
