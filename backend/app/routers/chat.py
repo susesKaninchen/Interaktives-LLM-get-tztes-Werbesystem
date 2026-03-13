@@ -1,17 +1,35 @@
-"""WebSocket chat endpoint with LLM streaming."""
+"""WebSocket chat endpoint with LLM streaming via LangGraph."""
 
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
+from sqlalchemy import select
 
 from app.db.engine import async_session
 from app.db.models import Conversation, Message
-from app.agents.orchestrator import respond_stream
+from app.agents.orchestrator import compile_graph, respond_stream
 from app.agents.nodes.router import router_node
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def load_chat_history(conversation_id: int) -> list:
+    """Load existing messages as LangChain message objects."""
+    chat_history = []
+    async with async_session() as db:
+        result = await db.execute(
+            select(Message)
+            .where(Message.conversation_id == conversation_id)
+            .order_by(Message.created_at.asc())
+        )
+        for msg in result.scalars().all():
+            if msg.role == "user":
+                chat_history.append(HumanMessage(content=msg.content))
+            elif msg.role == "assistant":
+                chat_history.append(AIMessage(content=msg.content))
+    return chat_history
 
 
 @router.websocket("/ws/chat/{conversation_id}")
@@ -27,21 +45,11 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
             return
         current_phase = conv.current_phase.value if conv.current_phase else "search"
 
-    # Load existing messages for context
-    chat_history = []
-    async with async_session() as db:
-        from sqlalchemy import select
-        result = await db.execute(
-            select(Message)
-            .where(Message.conversation_id == conversation_id)
-            .order_by(Message.created_at.asc())
-        )
-        for msg in result.scalars().all():
-            if msg.role == "user":
-                chat_history.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                from langchain_core.messages import AIMessage
-                chat_history.append(AIMessage(content=msg.content))
+    chat_history = await load_chat_history(conversation_id)
+
+    # Accumulated state across turns
+    search_results = []
+    selected_company = None
 
     try:
         while True:
@@ -58,45 +66,81 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
                 db.add(user_msg)
                 await db.commit()
 
-            # Add to chat history
             chat_history.append(HumanMessage(content=user_content))
 
-            # Build state for the agent
+            # Build state for the graph
             state = {
                 "messages": chat_history,
                 "conversation_id": conversation_id,
                 "current_phase": current_phase,
                 "intent": "",
-                "search_results": [],
-                "selected_company": None,
+                "search_results": search_results,
+                "selected_company": selected_company,
                 "company_profile": None,
                 "user_profile": None,
                 "matching_results": [],
                 "generated_content": "",
             }
 
-            # Classify intent (fire and forget for now, will be used in later phases)
+            # Run intent classification
             try:
                 intent_result = await router_node(state)
-                state["intent"] = intent_result.get("intent", "general_chat")
+                intent = intent_result.get("intent", "general_chat")
+                state["intent"] = intent
+                logger.info(f"Intent classified: {intent}")
             except Exception as e:
                 logger.warning(f"Router failed: {e}")
-                state["intent"] = "general_chat"
+                intent = "general_chat"
+                state["intent"] = intent
 
-            # Stream LLM response
             await websocket.send_json({"type": "stream_start", "content": ""})
 
             full_content = ""
-            try:
-                async for chunk in respond_stream(state):
-                    token = chunk.content if hasattr(chunk, "content") else str(chunk)
-                    if token:
-                        full_content += token
-                        await websocket.send_json({"type": "stream_token", "content": token})
-            except Exception as e:
-                logger.error(f"LLM streaming error: {e}")
-                full_content = f"Entschuldigung, es gab einen Fehler bei der Verarbeitung: {e}"
-                await websocket.send_json({"type": "stream_token", "content": full_content})
+
+            # For search and crawl intents, run the graph (non-streaming)
+            if intent in ("search", "crawl_url"):
+                try:
+                    graph = compile_graph()
+                    result = await graph.ainvoke(state)
+
+                    # Extract the last AI message
+                    if result.get("messages"):
+                        last_msg = result["messages"][-1]
+                        full_content = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+                    # Update accumulated state
+                    if result.get("search_results"):
+                        search_results = result["search_results"]
+                    if result.get("selected_company"):
+                        selected_company = result["selected_company"]
+                    if result.get("current_phase"):
+                        current_phase = result["current_phase"]
+                        # Update phase in DB
+                        async with async_session() as db:
+                            conv = await db.get(Conversation, conversation_id)
+                            if conv:
+                                from app.db.models import ConversationPhase
+                                conv.current_phase = ConversationPhase(current_phase)
+                                await db.commit()
+
+                    await websocket.send_json({"type": "stream_token", "content": full_content})
+
+                except Exception as e:
+                    logger.error(f"Graph execution error: {e}")
+                    full_content = f"Es gab einen Fehler: {e}"
+                    await websocket.send_json({"type": "stream_token", "content": full_content})
+            else:
+                # For general chat: stream tokens directly
+                try:
+                    async for chunk in respond_stream(state):
+                        token = chunk.content if hasattr(chunk, "content") else str(chunk)
+                        if token:
+                            full_content += token
+                            await websocket.send_json({"type": "stream_token", "content": token})
+                except Exception as e:
+                    logger.error(f"LLM streaming error: {e}")
+                    full_content = f"Entschuldigung, es gab einen Fehler: {e}"
+                    await websocket.send_json({"type": "stream_token", "content": full_content})
 
             # Save assistant message
             async with async_session() as db:
@@ -108,8 +152,6 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
                 db.add(assistant_msg)
                 await db.commit()
 
-            # Add to chat history
-            from langchain_core.messages import AIMessage
             chat_history.append(AIMessage(content=full_content))
 
             await websocket.send_json({

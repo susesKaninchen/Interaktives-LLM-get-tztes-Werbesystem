@@ -53,10 +53,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             streamingContent: s.streamingContent + msg.content,
           }));
           break;
-        case "stream_end":
-          set((s) => ({
+        case "stream_end": {
+          // Update phase if provided
+          const updates: Partial<ChatStore> = {
             isStreaming: false,
             streamingContent: "",
+          };
+          set((s) => ({
+            ...updates,
             messages: [
               ...s.messages,
               {
@@ -68,8 +72,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 created_at: new Date().toISOString(),
               },
             ],
+            // Update conversation phase in local state
+            conversations: msg.phase
+              ? s.conversations.map((c) =>
+                  c.id === id ? { ...c, current_phase: msg.phase! } : c
+                )
+              : s.conversations,
           }));
           break;
+        }
         case "error":
           set({ isStreaming: false, streamingContent: "" });
           break;

@@ -6,6 +6,8 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from app.agents.state import AgentState
 from app.agents.nodes.router import router_node
+from app.agents.nodes.search import search_node
+from app.agents.nodes.crawler import crawler_node
 from app.services.llm import get_agent_llm
 
 SYSTEM_PROMPT = """Du bist ein hilfreicher Assistent in einem interaktiven Werbesystem. Du hilfst dem Nutzer dabei:
@@ -55,9 +57,13 @@ async def respond_stream(state: AgentState):
 def route_intent(state: AgentState) -> str:
     """Route to the appropriate node based on intent."""
     intent = state.get("intent", "general_chat")
-    # For Phase 2, all intents route to the general respond node
-    # Later phases will add specific nodes for each intent
-    return "respond"
+
+    if intent == "search":
+        return "search"
+    elif intent == "crawl_url":
+        return "crawler"
+    else:
+        return "respond"
 
 
 def build_graph():
@@ -67,6 +73,8 @@ def build_graph():
     # Add nodes
     graph.add_node("router", router_node)
     graph.add_node("respond", respond_node)
+    graph.add_node("search", search_node)
+    graph.add_node("crawler", crawler_node)
 
     # Set entry point
     graph.set_entry_point("router")
@@ -74,10 +82,14 @@ def build_graph():
     # Add conditional edges from router
     graph.add_conditional_edges("router", route_intent, {
         "respond": "respond",
+        "search": "search",
+        "crawler": "crawler",
     })
 
-    # Respond always ends
+    # All terminal nodes go to END
     graph.add_edge("respond", END)
+    graph.add_edge("search", END)
+    graph.add_edge("crawler", END)
 
     return graph
 
