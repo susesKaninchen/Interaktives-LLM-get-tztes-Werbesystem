@@ -1,0 +1,30 @@
+llm:
+  default_model: "oss-120b"
+  models:
+    oss-120b:
+      base_url: "https://models.mylab.th-luebeck.dev/v1/"
+      api_key: "TH-Luebeck"
+      model_name: "oss-120b"
+      temperature: 0.7
+      max_tokens: 4096
+    qwen-27b:
+      base_url: "https://models.mylab.th-luebeck.dev/v1/"
+      api_key: "TH-Luebeck"
+      model_name: "qwen-3.5-27b"
+      temperature: 0.7
+      max_tokens: 4096
+  routing:
+    router: "oss-120b"
+    agents: "qwen-27b"
+    embedding: "local"
+
+database:
+  sqlite_url: "sqlite+aiosqlite:///./data/app.db"
+  chroma_persist_dir: "./data/chroma"
+
+search:
+  provider: "duckduckgo"
+
+crawler:
+  max_pages: 10
+  timeout_seconds: 30
