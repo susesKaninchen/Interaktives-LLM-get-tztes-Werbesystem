@@ -50,6 +50,7 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
     # Accumulated state across turns
     search_results = []
     selected_company = None
+    company_profile = None
 
     try:
         while True:
@@ -76,7 +77,7 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
                 "intent": "",
                 "search_results": search_results,
                 "selected_company": selected_company,
-                "company_profile": None,
+                "company_profile": company_profile,
                 "user_profile": None,
                 "matching_results": [],
                 "generated_content": "",
@@ -97,8 +98,8 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
 
             full_content = ""
 
-            # For search and crawl intents, run the graph (non-streaming)
-            if intent in ("search", "crawl_url"):
+            # For tool-based intents, run the graph (non-streaming)
+            if intent in ("search", "crawl_url", "matching"):
                 try:
                     graph = compile_graph()
                     result = await graph.ainvoke(state)
@@ -113,6 +114,8 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
                         search_results = result["search_results"]
                     if result.get("selected_company"):
                         selected_company = result["selected_company"]
+                    if result.get("company_profile"):
+                        company_profile = result["company_profile"]
                     if result.get("current_phase"):
                         current_phase = result["current_phase"]
                         # Update phase in DB
