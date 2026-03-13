@@ -11,6 +11,8 @@ from app.agents.nodes.crawler import crawler_node
 from app.agents.nodes.profile_builder import profile_builder_node
 from app.agents.nodes.user_profile import user_profile_node
 from app.agents.nodes.matching import matching_node
+from app.agents.nodes.outreach import outreach_node
+from app.agents.nodes.template_mgr import template_mgr_node
 from app.services.llm import get_agent_llm
 
 SYSTEM_PROMPT = """Du bist ein hilfreicher Assistent in einem interaktiven Werbesystem. Du hilfst dem Nutzer dabei:
@@ -65,7 +67,9 @@ def route_intent(state: AgentState) -> str:
         "search": "search",
         "crawl_url": "crawler",
         "matching": "matching",
+        "outreach": "outreach",
         "user_profile": "user_profile",
+        "template": "template_mgr",
     }
 
     # If matching is requested but we're still in profile phase, build profile first
@@ -87,6 +91,8 @@ def build_graph():
     graph.add_node("profile_builder", profile_builder_node)
     graph.add_node("user_profile", user_profile_node)
     graph.add_node("matching", matching_node)
+    graph.add_node("outreach", outreach_node)
+    graph.add_node("template_mgr", template_mgr_node)
 
     # Set entry point
     graph.set_entry_point("router")
@@ -99,6 +105,8 @@ def build_graph():
         "profile_builder": "profile_builder",
         "user_profile": "user_profile",
         "matching": "matching",
+        "outreach": "outreach",
+        "template_mgr": "template_mgr",
     })
 
     # All terminal nodes go to END
@@ -108,6 +116,8 @@ def build_graph():
     graph.add_edge("profile_builder", END)
     graph.add_edge("user_profile", END)
     graph.add_edge("matching", END)
+    graph.add_edge("outreach", END)
+    graph.add_edge("template_mgr", END)
 
     return graph
 
