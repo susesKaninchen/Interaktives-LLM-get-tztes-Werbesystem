@@ -13,6 +13,7 @@ from app.agents.nodes.user_profile import user_profile_node
 from app.agents.nodes.matching import matching_node
 from app.agents.nodes.outreach import outreach_node
 from app.agents.nodes.template_mgr import template_mgr_node
+from app.agents.nodes.knowledge import knowledge_node
 from app.services.llm import get_agent_llm
 
 SYSTEM_PROMPT = """Du bist ein hilfreicher Assistent in einem interaktiven Werbesystem. Du hilfst dem Nutzer dabei:
@@ -28,16 +29,33 @@ Wichtige Regeln:
 - Zeige immer an, in welcher Phase sich die Konversation befindet
 - Antworte auf Deutsch
 
-Aktuelle Phase: {phase}"""
+Aktuelle Phase: {phase}
+
+{knowledge_section}"""
+
+
+async def _build_system_prompt(phase: str) -> str:
+    """Build system prompt with injected knowledge."""
+    knowledge_section = ""
+    try:
+        from app.agents.nodes.knowledge import get_all_knowledge
+        entries = await get_all_knowledge()
+        if entries:
+            items = "\n".join(f"- {e['content']}" for e in entries[:10])
+            knowledge_section = f"Gespeichertes Wissen (nutze es als Kontext):\n{items}"
+    except Exception:
+        pass
+    return SYSTEM_PROMPT.format(phase=phase, knowledge_section=knowledge_section)
 
 
 async def respond_node(state: AgentState) -> dict:
     """Generate a response using the agent LLM."""
     llm = get_agent_llm()
     phase = state.get("current_phase", "search")
+    system_prompt = await _build_system_prompt(phase)
 
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT.format(phase=phase)),
+        SystemMessage(content=system_prompt),
         *state["messages"],
     ]
 
@@ -49,9 +67,10 @@ async def respond_stream(state: AgentState):
     """Generate a streaming response using the agent LLM."""
     llm = get_agent_llm()
     phase = state.get("current_phase", "search")
+    system_prompt = await _build_system_prompt(phase)
 
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT.format(phase=phase)),
+        SystemMessage(content=system_prompt),
         *state["messages"],
     ]
 
@@ -70,6 +89,7 @@ def route_intent(state: AgentState) -> str:
         "outreach": "outreach",
         "user_profile": "user_profile",
         "template": "template_mgr",
+        "knowledge": "knowledge",
     }
 
     # If matching is requested but we're still in profile phase, build profile first
@@ -93,6 +113,7 @@ def build_graph():
     graph.add_node("matching", matching_node)
     graph.add_node("outreach", outreach_node)
     graph.add_node("template_mgr", template_mgr_node)
+    graph.add_node("knowledge", knowledge_node)
 
     # Set entry point
     graph.set_entry_point("router")
@@ -107,6 +128,7 @@ def build_graph():
         "matching": "matching",
         "outreach": "outreach",
         "template_mgr": "template_mgr",
+        "knowledge": "knowledge",
     })
 
     # All terminal nodes go to END
@@ -118,6 +140,7 @@ def build_graph():
     graph.add_edge("matching", END)
     graph.add_edge("outreach", END)
     graph.add_edge("template_mgr", END)
+    graph.add_edge("knowledge", END)
 
     return graph
 

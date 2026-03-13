@@ -2,8 +2,13 @@ import { useChatStore } from "@/store/chatStore";
 import { MessageList } from "./MessageList";
 import { ChatInput } from "./ChatInput";
 import { PhaseStepper } from "./PhaseStepper";
+import { PanelRight } from "lucide-react";
 
-export function ChatWindow() {
+interface ChatWindowProps {
+  onTogglePanel?: () => void;
+}
+
+export function ChatWindow({ onTogglePanel }: ChatWindowProps) {
   const { activeConversationId, conversations } = useChatStore();
   const activeConv = conversations.find((c) => c.id === activeConversationId);
 
@@ -22,7 +27,20 @@ export function ChatWindow() {
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
-      <PhaseStepper currentPhase={activeConv?.current_phase ?? "search"} />
+      <div className="flex items-center border-b border-gray-800">
+        <div className="flex-1">
+          <PhaseStepper currentPhase={activeConv?.current_phase ?? "search"} />
+        </div>
+        {onTogglePanel && (
+          <button
+            onClick={onTogglePanel}
+            className="px-3 py-3 text-gray-500 hover:text-gray-300 transition-colors"
+            title="Vorlagen & Wissen"
+          >
+            <PanelRight size={18} />
+          </button>
+        )}
+      </div>
       <MessageList />
       <ChatInput />
     </div>

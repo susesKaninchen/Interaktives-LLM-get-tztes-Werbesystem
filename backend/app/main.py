@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.engine import engine
 from app.db.models import Base
-from app.routers import chat, customers, profile, templates
+from app.routers import chat, customers, knowledge, profile, templates
 
 
 @asynccontextmanager
@@ -43,8 +43,18 @@ app.include_router(customers.router)
 app.include_router(chat.router)
 app.include_router(profile.router)
 app.include_router(templates.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/config/models")
+async def get_models():
+    from app.config import config
+    return {
+        "models": {k: {"model_name": v.model_name} for k, v in config.llm.models.items()},
+        "routing": config.llm.routing.model_dump(),
+    }
