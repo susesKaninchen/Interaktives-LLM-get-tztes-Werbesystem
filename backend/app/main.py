@@ -1,7 +1,11 @@
 """FastAPI application entry point."""
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

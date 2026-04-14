@@ -79,8 +79,9 @@ async def respond_stream(state: AgentState):
 
 
 def route_intent(state: AgentState) -> str:
-    """Route to the appropriate node based on intent."""
+    """Route to the appropriate node based on intent and current state."""
     intent = state.get("intent", "general_chat")
+    has_company = bool(state.get("selected_company") or state.get("company_profile"))
 
     routing_map = {
         "search": "search",
@@ -91,6 +92,11 @@ def route_intent(state: AgentState) -> str:
         "template": "template_mgr",
         "knowledge": "knowledge",
     }
+
+    # Smart fallbacks: if matching/outreach but no company data yet, use respond
+    # so the LLM can guide the user (e.g. "search first" or "give me a URL")
+    if intent in ("matching", "outreach") and not has_company:
+        return "respond"
 
     # If matching is requested but we're still in profile phase, build profile first
     if intent == "matching" and state.get("current_phase") == "profile":

@@ -1,16 +1,18 @@
 """Profile builder agent node - creates structured company profiles."""
 
 import json
+import logging
 
 from langchain_core.messages import AIMessage, SystemMessage
 from pydantic import BaseModel, Field
-from sqlalchemy import select
 
 from app.agents.state import AgentState
 from app.db.engine import async_session
-from app.db.models import CompanyProfile, Conversation
-from app.db.vector_store import store_website_content, query_website_content
+from app.db.models import CompanyProfile
+from app.db.vector_store import store_website_content
 from app.services.llm import get_agent_llm
+
+logger = logging.getLogger(__name__)
 
 PROFILE_EXTRACT_PROMPT = """Analysiere die folgenden Website-Inhalte und extrahiere ein strukturiertes Firmenprofil.
 
@@ -36,7 +38,7 @@ PROFILE_PRESENT_PROMPT = """Hier ist das Firmenprofil das ich erstellt habe:
 
 {profile}
 
-Praesentiere dieses Profil uebersichtlich als Steckbrief.
+Praesentiere dieses Profil uebersichtlich als Steckbrief mit Markdown-Formatierung.
 Frage den Nutzer, ob das Profil passt oder ob er Aenderungen/mehr Details moechte.
 Schlage vor, als naechstes ein Matching mit den eigenen Angeboten zu machen.
 Antworte auf Deutsch."""
@@ -55,7 +57,7 @@ async def profile_builder_node(state: AgentState) -> dict:
     pages = selected_company["pages"]
 
     # Store in ChromaDB for future queries
-    stored = store_website_content(conversation_id, pages)
+    store_website_content(conversation_id, pages)
 
     # Combine content for profile extraction
     combined = "\n\n---\n\n".join(
@@ -71,18 +73,23 @@ async def profile_builder_node(state: AgentState) -> dict:
         profile_data = await structured_llm.ainvoke([
             SystemMessage(content=PROFILE_EXTRACT_PROMPT.format(content=combined[:8000])),
         ])
-    except Exception:
+    except Exception as e:
+        logger.error(f"Profile extraction failed: {e}")
         profile_data = CompanyProfileData(
             name=selected_company.get("title", ""),
             website=selected_company.get("url", ""),
         )
+
+    # Ensure website is set
+    if not profile_data.website:
+        profile_data.website = selected_company.get("url", "")
 
     # Save to database
     async with async_session() as db:
         profile = CompanyProfile(
             conversation_id=conversation_id,
             name=profile_data.name,
-            website=profile_data.website or selected_company.get("url", ""),
+            website=profile_data.website,
             address=profile_data.address,
             phone=profile_data.phone,
             email=profile_data.email,
@@ -107,7 +114,6 @@ E-Mail: {profile_data.email or 'Nicht verfuegbar'}
 **Beschreibung:** {profile_data.description or 'Nicht verfuegbar'}
 **USP:** {profile_data.usp or 'Nicht verfuegbar'}"""
 
-    # Present with LLM
     response = await llm.ainvoke([
         SystemMessage(content=PROFILE_PRESENT_PROMPT.format(profile=profile_text)),
         *state["messages"],

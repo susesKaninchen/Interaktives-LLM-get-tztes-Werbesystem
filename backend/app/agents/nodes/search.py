@@ -1,6 +1,6 @@
 """Search agent node - searches for businesses and presents results."""
 
-import json
+import logging
 
 from langchain_core.messages import AIMessage, SystemMessage
 from pydantic import BaseModel, Field
@@ -9,10 +9,7 @@ from app.agents.state import AgentState
 from app.agents.tools.web_search import search_web
 from app.services.llm import get_agent_llm
 
-SEARCH_EXTRACT_PROMPT = """Analysiere die letzte Nachricht des Nutzers und extrahiere eine Suchanfrage daraus.
-Der Nutzer sucht nach Firmen/Kunden. Erstelle eine gute Suchanfrage fuer DuckDuckGo.
-Beispiel: "Zahnarzt in Luebeck" -> "Zahnarzt Luebeck"
-Gib NUR die Suchanfrage zurueck, nichts anderes."""
+logger = logging.getLogger(__name__)
 
 SEARCH_PRESENT_PROMPT = """Du bist ein Assistent der Suchergebnisse praesentiert. Hier sind die Ergebnisse einer Websuche:
 
@@ -24,7 +21,7 @@ Sei freundlich und hilfsbereit. Antworte auf Deutsch."""
 
 
 class SearchQuery(BaseModel):
-    query: str = Field(description="The search query to use")
+    query: str = Field(description="The search query to use for DuckDuckGo")
 
 
 async def search_node(state: AgentState) -> dict:
@@ -36,14 +33,16 @@ async def search_node(state: AgentState) -> dict:
     try:
         structured_llm = llm.with_structured_output(SearchQuery)
         result = await structured_llm.ainvoke([
-            SystemMessage(content=SEARCH_EXTRACT_PROMPT),
+            SystemMessage(content="Extrahiere eine Suchanfrage aus der Nachricht. Beispiel: 'Zahnarzt in Luebeck' -> query='Zahnarzt Luebeck'"),
             messages[-1],
         ])
         query = result.query
-    except Exception:
-        # Fallback: use the last user message directly
+    except Exception as e:
+        logger.warning(f"Query extraction failed: {e}")
         last_msg = messages[-1]
         query = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+
+    logger.info(f"Searching for: {query}")
 
     # Perform web search
     results = await search_web(query)

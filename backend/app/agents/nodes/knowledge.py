@@ -1,8 +1,10 @@
 """Knowledge agent node - manages cross-conversation insights."""
 
 import json
+import logging
 
 from langchain_core.messages import AIMessage, SystemMessage
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.agents.state import AgentState
@@ -10,6 +12,8 @@ from app.db.engine import async_session
 from app.db.models import KnowledgeEntry
 from app.db.vector_store import get_knowledge_collection
 from app.services.llm import get_agent_llm
+
+logger = logging.getLogger(__name__)
 
 
 async def get_relevant_knowledge(query: str, n_results: int = 5) -> list[str]:
@@ -38,6 +42,11 @@ async def get_all_knowledge() -> list[dict]:
         ]
 
 
+class Insight(BaseModel):
+    content: str = Field(description="The knowledge/insight to save as a clear sentence")
+    tags: list[str] = Field(default_factory=list, description="2-4 relevant tags")
+
+
 KNOWLEDGE_PROMPT = """Du verwaltest die Wissensbasis des Nutzers. Hier sind die aktuellen Eintraege:
 
 {entries}
@@ -54,19 +63,12 @@ async def knowledge_node(state: AgentState) -> dict:
 
     # Check if user wants to save something
     if any(word in user_text.lower() for word in ["speicher", "merk", "merke", "notier"]):
-        # Extract the insight to save
         llm = get_agent_llm()
-        from pydantic import BaseModel, Field
-
-        class Insight(BaseModel):
-            content: str = Field(description="The knowledge/insight to save")
-            tags: list[str] = Field(default_factory=list, description="Relevant tags")
-
         try:
             structured_llm = llm.with_structured_output(Insight)
             insight = await structured_llm.ainvoke([
                 SystemMessage(content="Extrahiere die Erkenntnis/das Wissen das der Nutzer speichern moechte. Formuliere es klar und praegnant."),
-                *messages,
+                *messages[-3:],
             ])
 
             async with async_session() as db:
@@ -89,7 +91,8 @@ async def knowledge_node(state: AgentState) -> dict:
             return {
                 "messages": [AIMessage(content=f"Erkenntnis gespeichert: \"{insight.content}\"\nTags: {', '.join(insight.tags) if insight.tags else 'keine'}")],
             }
-        except Exception:
+        except Exception as e:
+            logger.error(f"Knowledge save failed: {e}")
             return {
                 "messages": [AIMessage(content="Ich konnte die Erkenntnis nicht verarbeiten. Bitte formuliere sie nochmal.")],
             }
@@ -108,7 +111,7 @@ async def knowledge_node(state: AgentState) -> dict:
     llm = get_agent_llm()
     response = await llm.ainvoke([
         SystemMessage(content=KNOWLEDGE_PROMPT.format(entries=entries_text)),
-        *messages,
+        *messages[-3:],
     ])
 
     return {"messages": [response]}

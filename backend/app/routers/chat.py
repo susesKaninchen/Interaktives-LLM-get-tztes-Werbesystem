@@ -1,5 +1,6 @@
 """WebSocket chat endpoint with LLM streaming via LangGraph."""
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -7,12 +8,23 @@ from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy import select
 
 from app.db.engine import async_session
-from app.db.models import Conversation, Message
+from app.db.models import Conversation, ConversationPhase, Message
 from app.agents.orchestrator import compile_graph, respond_stream
 from app.agents.nodes.router import router_node
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+INTENT_LABELS = {
+    "search": "Suche im Web...",
+    "crawl_url": "Crawle Website...",
+    "matching": "Erstelle Matching...",
+    "outreach": "Generiere Kontaktanfrage...",
+    "user_profile": "Aktualisiere Profil...",
+    "template": "Verwalte Vorlagen...",
+    "knowledge": "Verarbeite Wissen...",
+    "general_chat": "Denke nach...",
+}
 
 
 async def load_chat_history(conversation_id: int) -> list:
@@ -30,6 +42,11 @@ async def load_chat_history(conversation_id: int) -> list:
             elif msg.role == "assistant":
                 chat_history.append(AIMessage(content=msg.content))
     return chat_history
+
+
+async def send_status(ws: WebSocket, text: str):
+    """Send a status update to the frontend."""
+    await ws.send_json({"type": "status", "content": text})
 
 
 @router.websocket("/ws/chat/{conversation_id}")
@@ -84,17 +101,22 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
                 "generated_content": generated_content,
             }
 
-            # Run intent classification
-            try:
-                intent_result = await router_node(state)
-                intent = intent_result.get("intent", "general_chat")
-                state["intent"] = intent
-                logger.info(f"Intent classified: {intent}")
-            except Exception as e:
-                logger.warning(f"Router failed: {e}")
-                intent = "general_chat"
-                state["intent"] = intent
+            # --- Status: classifying ---
+            await send_status(websocket, "Analysiere Nachricht...")
 
+            intent = "general_chat"
+            try:
+                intent_result = await asyncio.wait_for(router_node(state), timeout=30.0)
+                intent = intent_result.get("intent", "general_chat")
+                logger.info(f"Intent classified: {intent}")
+            except asyncio.TimeoutError:
+                logger.warning("Router timed out, falling back to general_chat")
+            except Exception as e:
+                logger.warning(f"Router failed: {e}", exc_info=True)
+            state["intent"] = intent
+
+            # --- Status: executing ---
+            await send_status(websocket, INTENT_LABELS.get(intent, "Verarbeite..."))
             await websocket.send_json({"type": "stream_start", "content": ""})
 
             full_content = ""
@@ -121,22 +143,21 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
                         generated_content = result["generated_content"]
                     if result.get("current_phase"):
                         current_phase = result["current_phase"]
-                        # Update phase in DB
                         async with async_session() as db:
                             conv = await db.get(Conversation, conversation_id)
                             if conv:
-                                from app.db.models import ConversationPhase
                                 conv.current_phase = ConversationPhase(current_phase)
                                 await db.commit()
 
                     await websocket.send_json({"type": "stream_token", "content": full_content})
 
                 except Exception as e:
-                    logger.error(f"Graph execution error: {e}")
+                    logger.error(f"Graph execution error: {e}", exc_info=True)
                     full_content = f"Es gab einen Fehler: {e}"
                     await websocket.send_json({"type": "stream_token", "content": full_content})
             else:
                 # For general chat: stream tokens directly
+                await send_status(websocket, "Generiere Antwort...")
                 try:
                     async for chunk in respond_stream(state):
                         token = chunk.content if hasattr(chunk, "content") else str(chunk)
@@ -144,7 +165,7 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
                             full_content += token
                             await websocket.send_json({"type": "stream_token", "content": token})
                 except Exception as e:
-                    logger.error(f"LLM streaming error: {e}")
+                    logger.error(f"LLM streaming error: {e}", exc_info=True)
                     full_content = f"Entschuldigung, es gab einen Fehler: {e}"
                     await websocket.send_json({"type": "stream_token", "content": full_content})
 
@@ -167,4 +188,10 @@ async def chat_websocket(websocket: WebSocket, conversation_id: int):
             })
 
     except WebSocketDisconnect:
-        pass
+        logger.info(f"WebSocket disconnected for conversation {conversation_id}")
+    except Exception as e:
+        logger.exception(f"Unexpected error in WebSocket handler: {e}")
+        try:
+            await websocket.send_json({"type": "error", "content": str(e)})
+        except Exception:
+            pass

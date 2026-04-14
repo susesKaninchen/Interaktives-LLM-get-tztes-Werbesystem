@@ -8,6 +8,8 @@ interface ChatStore {
   messages: Message[];
   streamingContent: string;
   isStreaming: boolean;
+  isThinking: boolean;
+  statusText: string;
   ws: ChatWebSocket | null;
 
   loadConversations: () => Promise<void>;
@@ -23,6 +25,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   streamingContent: "",
   isStreaming: false,
+  isThinking: false,
+  statusText: "",
   ws: null,
 
   loadConversations: async () => {
@@ -37,7 +41,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   selectConversation: async (id: number) => {
-    // Close existing WebSocket
     get().ws?.close();
 
     const messages = await api.getMessages(id);
@@ -45,8 +48,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     ws.onMessage((msg: WsMessage) => {
       switch (msg.type) {
+        case "status":
+          set({ isThinking: true, statusText: msg.content });
+          break;
         case "stream_start":
-          set({ isStreaming: true, streamingContent: "" });
+          set({ isStreaming: true, isThinking: false, statusText: "", streamingContent: "" });
           break;
         case "stream_token":
           set((s) => ({
@@ -54,13 +60,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           }));
           break;
         case "stream_end": {
-          // Update phase if provided
-          const updates: Partial<ChatStore> = {
-            isStreaming: false,
-            streamingContent: "",
-          };
           set((s) => ({
-            ...updates,
+            isStreaming: false,
+            isThinking: false,
+            statusText: "",
+            streamingContent: "",
             messages: [
               ...s.messages,
               {
@@ -72,7 +76,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 created_at: new Date().toISOString(),
               },
             ],
-            // Update conversation phase in local state
             conversations: msg.phase
               ? s.conversations.map((c) =>
                   c.id === id ? { ...c, current_phase: msg.phase! } : c
@@ -82,7 +85,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           break;
         }
         case "error":
-          set({ isStreaming: false, streamingContent: "" });
+          set({ isStreaming: false, isThinking: false, statusText: "" });
           break;
       }
     });
@@ -107,8 +110,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const { ws, activeConversationId } = get();
     if (!ws || !activeConversationId) return;
 
-    // Add user message to local state immediately
     set((s) => ({
+      isThinking: true,
+      statusText: "Sende...",
       messages: [
         ...s.messages,
         {

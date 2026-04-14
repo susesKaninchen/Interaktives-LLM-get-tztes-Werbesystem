@@ -4,11 +4,12 @@ import { useChatStore } from "@/store/chatStore";
 
 export function ChatInput() {
   const [input, setInput] = useState("");
-  const { sendMessage, isStreaming, activeConversationId } = useChatStore();
+  const { sendMessage, isStreaming, isThinking, activeConversationId } = useChatStore();
+  const busy = isStreaming || isThinking;
 
   const handleSend = () => {
     const trimmed = input.trim();
-    if (!trimmed || isStreaming || !activeConversationId) return;
+    if (!trimmed || busy || !activeConversationId) return;
     sendMessage(trimmed);
     setInput("");
   };
@@ -32,13 +33,13 @@ export function ChatInput() {
               ? "Nachricht eingeben..."
               : "Waehle oder erstelle eine Konversation"
           }
-          disabled={!activeConversationId || isStreaming}
+          disabled={!activeConversationId || busy}
           rows={1}
           className="flex-1 resize-none rounded-xl bg-gray-800 border border-gray-700 px-4 py-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 disabled:opacity-50"
         />
         <button
           onClick={handleSend}
-          disabled={!input.trim() || isStreaming || !activeConversationId}
+          disabled={!input.trim() || busy || !activeConversationId}
           className="p-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <Send size={18} />

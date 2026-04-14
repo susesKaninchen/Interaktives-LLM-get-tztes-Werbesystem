@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { useChatStore } from "@/store/chatStore";
-import { Bot, User } from "lucide-react";
+import { Bot, User, Loader2 } from "lucide-react";
 
 function MarkdownContent({ content }: { content: string }) {
   return (
@@ -27,17 +27,35 @@ function MarkdownContent({ content }: { content: string }) {
   );
 }
 
+function ThinkingIndicator({ text }: { text: string }) {
+  return (
+    <div className="flex gap-3">
+      <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
+        <Loader2 size={16} className="animate-spin" />
+      </div>
+      <div className="rounded-2xl px-4 py-2.5 text-sm bg-gray-800 text-gray-400 flex items-center gap-2">
+        <span className="flex gap-1">
+          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+          <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+        </span>
+        <span>{text}</span>
+      </div>
+    </div>
+  );
+}
+
 export function MessageList() {
-  const { messages, streamingContent, isStreaming } = useChatStore();
+  const { messages, streamingContent, isStreaming, isThinking, statusText } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, streamingContent]);
+  }, [messages, streamingContent, isThinking, statusText]);
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-      {messages.length === 0 && !isStreaming && (
+      {messages.length === 0 && !isStreaming && !isThinking && (
         <div className="flex items-center justify-center h-full text-gray-500">
           <p>Starte eine Konversation, um Kunden zu finden und zu analysieren.</p>
         </div>
@@ -80,6 +98,10 @@ export function MessageList() {
             <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse ml-1" />
           </div>
         </div>
+      )}
+
+      {isThinking && !streamingContent && (
+        <ThinkingIndicator text={statusText || "Denke nach..."} />
       )}
 
       <div ref={bottomRef} />

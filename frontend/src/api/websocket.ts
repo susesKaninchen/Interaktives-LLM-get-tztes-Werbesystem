@@ -1,11 +1,14 @@
 export interface WsMessage {
-  type: "message" | "stream_start" | "stream_token" | "stream_end" | "error";
+  type: "message" | "stream_start" | "stream_token" | "stream_end" | "error" | "status";
   content: string;
   conversation_id?: number;
   phase?: string;
 }
 
 export type WsHandler = (msg: WsMessage) => void;
+
+// Vite's HMR patches the global WebSocket. Grab the native one.
+const NativeWebSocket = globalThis.WebSocket;
 
 export class ChatWebSocket {
   private ws: WebSocket | null = null;
@@ -19,11 +22,15 @@ export class ChatWebSocket {
   connect() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.host;
-    this.ws = new WebSocket(
-      `${protocol}//${host}/ws/chat/${this.conversationId}`
-    );
+    const url = `${protocol}//${host}/ws/chat/${this.conversationId}`;
 
-    this.ws.onmessage = (event) => {
+    this.ws = new NativeWebSocket(url);
+
+    this.ws.onopen = () => {
+      console.log("WebSocket connected:", url);
+    };
+
+    this.ws.onmessage = (event: MessageEvent) => {
       const msg: WsMessage = JSON.parse(event.data);
       this.handlers.forEach((h) => h(msg));
     };
@@ -40,7 +47,7 @@ export class ChatWebSocket {
   }
 
   send(content: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    if (this.ws?.readyState === NativeWebSocket.OPEN) {
       this.ws.send(JSON.stringify({ content }));
     }
   }
@@ -53,12 +60,14 @@ export class ChatWebSocket {
   }
 
   close() {
-    this.ws?.close();
+    if (this.ws && typeof this.ws.close === "function") {
+      this.ws.close();
+    }
     this.ws = null;
     this.handlers = [];
   }
 
   get connected() {
-    return this.ws?.readyState === WebSocket.OPEN;
+    return this.ws?.readyState === NativeWebSocket.OPEN;
   }
 }

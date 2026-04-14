@@ -4,13 +4,13 @@ llm:
     oss-120b:
       base_url: "https://models.mylab.th-luebeck.dev/v1/"
       api_key: "TH-Luebeck"
-      model_name: "oss-120b"
+      model_name: "gpt-oss-120b"
       temperature: 0.7
       max_tokens: 4096
     qwen-27b:
       base_url: "https://models.mylab.th-luebeck.dev/v1/"
       api_key: "TH-Luebeck"
-      model_name: "qwen-3.5-27b"
+      model_name: "qwen3.5-27b"
       temperature: 0.7
       max_tokens: 4096
   routing:
