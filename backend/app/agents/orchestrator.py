@@ -2,7 +2,7 @@
 
 from langchain_core.messages import AIMessage, SystemMessage
 from langgraph.graph import END, StateGraph
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.memory import MemorySaver
 
 from app.agents.state import AgentState
 from app.agents.nodes.router import router_node
@@ -158,6 +158,6 @@ def compile_graph(checkpointer=None):
 
 
 async def get_checkpointer():
-    """Get an async SQLite checkpointer."""
-    checkpointer = AsyncSqliteSaver.from_conn_string("./data/checkpoints.db")
+    """Get an async in-memory checkpointer."""
+    checkpointer = MemorySaver()
     return checkpointer
