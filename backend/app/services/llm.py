@@ -3,6 +3,7 @@
 from langchain_openai import ChatOpenAI
 
 from app.config import config
+from app.performance import cache_response, monitor_performance
 
 
 def get_llm(model_key: str | None = None) -> ChatOpenAI:
@@ -29,3 +30,14 @@ def get_router_llm() -> ChatOpenAI:
 def get_agent_llm() -> ChatOpenAI:
     """LLM for content generation (smart model)."""
     return get_llm(config.llm.routing.agents)
+
+
+# Cached versions for frequently used prompts
+def get_cached_router_llm() -> ChatOpenAI:
+    """Get cached LLM instance for router."""
+    return get_router_llm()
+
+
+def get_cached_agent_llm() -> ChatOpenAI:
+    """Get cached LLM instance for agent."""
+    return get_agent_llm()
