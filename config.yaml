@@ -1,21 +1,30 @@
 llm:
-  default_model: "oss-120b"
+  default_model: "chat-large"
   models:
-    oss-120b:
+    chat-large:
       base_url: "https://models.mylab.th-luebeck.dev/v1/"
       api_key: "TH-Luebeck"
-      model_name: "gpt-oss-120b"
+      model_name: "chat-large"
       temperature: 0.7
-      max_tokens: 4096
-    qwen-27b:
+      max_tokens: 8192
+      description: "Großes Modell für komplexe Aufgaben und Webseiten-Analyse (0.38s avg)"
+    chat-xlarge:
       base_url: "https://models.mylab.th-luebeck.dev/v1/"
       api_key: "TH-Luebeck"
-      model_name: "qwen3.5-27b"
+      model_name: "chat-xlarge"
+      temperature: 0.7
+      max_tokens: 10240
+      description: "XLargest Modell für komplexste Aufgaben (0.45s avg)"
+    chat-fast:
+      base_url: "https://models.mylab.th-luebeck.dev/v1/"
+      api_key: "TH-Luebeck"
+      model_name: "chat-fast"
       temperature: 0.7
       max_tokens: 4096
+      description: "Schnelles Modell für kleine Aufgaben (0.23s avg - 42% schneller)"
   routing:
-    router: "oss-120b"
-    agents: "qwen-27b"
+    router: "chat-large"
+    agents: "chat-large"
     embedding: "local"
 
 database:

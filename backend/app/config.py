@@ -14,6 +14,7 @@ class LLMModelConfig(BaseModel):
     model_name: str
     temperature: float = 0.7
     max_tokens: int = 4096
+    description: str = ""
 
 
 class LLMRoutingConfig(BaseModel):
