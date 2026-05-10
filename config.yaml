@@ -1,30 +1,23 @@
 llm:
-  default_model: "chat-large"
+  default_model: "qwen3.6-27b"
   models:
-    chat-large:
+    qwen3.6-27b:
       base_url: "https://models.mylab.th-luebeck.dev/v1/"
       api_key: "TH-Luebeck"
-      model_name: "chat-large"
+      model_name: "qwen3.6-27b"
       temperature: 0.7
       max_tokens: 8192
-      description: "Großes Modell für komplexe Aufgaben und Webseiten-Analyse (0.38s avg)"
-    chat-xlarge:
+      description: "Standard Modell für normale Aufgaben (Qwen3.6-27B parameters)"
+    qwen3.5-397b-a17b:
       base_url: "https://models.mylab.th-luebeck.dev/v1/"
       api_key: "TH-Luebeck"
-      model_name: "chat-xlarge"
+      model_name: "qwen3.5-397b-a17b"
       temperature: 0.7
-      max_tokens: 10240
-      description: "XLargest Modell für komplexste Aufgaben (0.45s avg)"
-    chat-fast:
-      base_url: "https://models.mylab.th-luebeck.dev/v1/"
-      api_key: "TH-Luebeck"
-      model_name: "chat-fast"
-      temperature: 0.7
-      max_tokens: 4096
-      description: "Schnelles Modell für kleine Aufgaben (0.23s avg - 42% schneller)"
+      max_tokens: 16384
+      description: "Leistungsstärkstes Modell für schwere Aufgaben (Qwen3.5-397B parameters)"
   routing:
-    router: "chat-large"
-    agents: "chat-large"
+    router: "qwen3.6-27b"
+    agents: "qwen3.5-397b-a17b"
     embedding: "local"
 
 database:
