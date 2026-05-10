@@ -6,7 +6,7 @@ import re
 from collections import defaultdict
 from typing import Dict, Optional
 from fastapi import Request, HTTPException, status
-from fastapi.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.responses import JSONResponse
 import logging
 
